@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# Function to check if a package is installed
+is_installed() {
+    command -v "$1" &>/dev/null
+}
+
+# Function to install packages based on the detected OS
+install_packages() {
+    case "$1" in
+        "debian"|"ubuntu")
+            install_debian_packages
+            ;;
+        "fedora")
+            install_fedora_packages
+            ;;
+        "arch")
+            install_arch_packages
+            ;;
+        "opensuse")
+            install_opensuse_packages
+            ;;
+        *)
+            echo "Unsupported distribution. Please install speedtest-cli and zenity manually."
+            exit 1
+            ;;
+    esac
+}
+
+# Package installation for Debian/Ubuntu
+install_debian_packages() {
+    for pkg in speedtest-cli zenity; do
+        if ! is_installed "$pkg"; then
+            echo "Installing $pkg..."
+            sudo apt update && sudo apt install -y "$pkg"
+        else
+            echo "$pkg is already installed."
+        fi
+    done
+}
+
+# Package installation for Fedora
+install_fedora_packages() {
+    for pkg in speedtest-cli zenity; do
+        if ! is_installed "$pkg"; then
+            echo "Installing $pkg..."
+            sudo dnf install -y "$pkg"
+        else
+            echo "$pkg is already installed."
+        fi
+    done
+}
+
+# Package installation for Arch Linux
+install_arch_packages() {
+    for pkg in speedtest-cli zenity; do
+        if ! is_installed "$pkg"; then
+            echo "Installing $pkg..."
+            sudo pacman -Syu --noconfirm "$pkg"
+        else
+            echo "$pkg is already installed."
+        fi
+    done
+}
+
+# Package installation for openSUSE
+install_opensuse_packages() {
+    for pkg in speedtest-cli zenity; do
+        if ! is_installed "$pkg"; then
+            echo "Installing $pkg..."
+            sudo zypper install -y "$pkg"
+        else
+            echo "$pkg is already installed."
+        fi
+    done
+}
+
+# Function to run speedtest and display progress
+run_speedtest() {
+    zenity --info --text="Running your speed test..." --title="Speed Test" &
+    info_pid=$!
+
+    # Run the speedtest in the background and capture the output
+    output=$(speedtest-cli --simple 2>&1)
+
+    # Check if the command was successful
+    if [ $? -ne 0 ]; then
+        kill $info_pid  # Kill the info dialog
+        zenity --error --text="Error running speed test. Please check your internet connection." --title="Error"
+        exit 1
+    fi
+    
+    # Extract the results
+    download=$(echo "$output" | grep 'Download' | awk '{print $2, $3}')
+    upload=$(echo "$output" | grep 'Upload' | awk '{print $2, $3}')
+    ping=$(echo "$output" | grep 'Ping' | awk '{print $2, $3}')
+
+    # This simulates some delay to mimic a running process
+    for i in {1..100}; do
+        echo "$i"
+        sleep 0.1  # This is just for demonstration, adjust as you see fit
+    done | zenity --progress --title="Speed Test Progress" --text="Measuring network speed..." --percentage=0 --auto-close
+
+    # Close the info dialog
+    kill $info_pid
+
+    # Display the results
+    zenity --info --text="Speed Test Results:\n\nDownload: $download\nUpload: $upload\nPing: $ping" --title="Speed Test Results"
+}
+
+# Function to create the main interface
+create_interface() {
+    zenity --question --title="Speed Test" --text="Would you like to run a speed test?" --ok-label="Start Test" --cancel-label="Quit"
+    if [ $? -eq 0 ]; then
+        run_speedtest
+    else
+        exit 0
+    fi
+}
+
+# Function to detect the OS
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "$ID" in
+            debian|ubuntu)
+                OS="debian"
+                ;;
+            fedora)
+                OS="fedora"
+                ;;
+            arch)
+                OS="arch"
+                ;;
+            opensuse*)
+                OS="opensuse"
+                ;;
+            *)
+                OS="unknown"
+                ;;
+        esac
+    fi
+}
+
+# Main program
+main() {
+    # Detect the OS
+    detect_os
+    
+    # Check if the OS is known
+    if [ "$OS" = "unknown" ]; then
+        echo "Unsupported or unknown distribution. Please install speedtest-cli and zenity manually."
+        exit 1
+    fi
+
+    # Install packages for the detected OS
+    install_packages "$OS"
+    
+    # Create the initial interface to start the speed test
+    create_interface
+}
+
+# Execute the main function
+main
